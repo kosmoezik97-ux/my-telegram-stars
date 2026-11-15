@@ -2,8 +2,6 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stars App</title>
@@ -40,6 +38,8 @@ button {
   font-size: 16px;
   font-weight: bold;
 }
+button:disabled { opacity: .6; }
+#status { font-size: 13px; opacity: .8; }
 </style>
 </head>
 <body>
@@ -48,15 +48,16 @@ button {
 
 <div class="card">
   <p>Твой баланс</p>
-  <div class="balance">
-    ⭐ <span id="balance">0</span>
-  </div>
+  <div class="balance">⭐ <span id="balance">0</span></div>
+  <p id="status">Подключаем профиль...</p>
 </div>
 
 <div class="card">
   <h3>🎁 Получить звёзды</h3>
   <p>Выбери способ получения бонусов:</p>
-  <button onclick="daily()">🎁 Ежедневный бонус</button>
+  <button id="dailyButton" onclick="daily()" disabled>
+    🎁 Ежедневный бонус
+  </button>
   <button onclick="invite()">👥 Пригласить друга</button>
 </div>
 
@@ -70,29 +71,69 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-let balance = 0;
-let claimed = false;
+const SUPABASE_URL = "https://exkwefcvxlotdmdizwwx.supabase.co";
+const SUPABASE_KEY = "sb_publishable_ii-90QiuM0f07AWV1PpWJA_yVIgnh-N";
+
+const FUNCTION_URL =
+  SUPABASE_URL + "/functions/v1/telegram-stars";
 
 const user = tg.initDataUnsafe?.user;
+
 if (user) {
   document.getElementById("username").textContent =
     user.first_name || "Пользователь";
 }
 
-function daily() {
-  if (claimed) {
-    tg.showAlert("Ты уже получил бонус!");
+async function loadProfile() {
+  const status = document.getElementById("status");
+
+  if (!tg.initData) {
+    status.textContent = "Открой приложение через Telegram.";
     return;
   }
-  balance += 5;
-  claimed = true;
-  document.getElementById("balance").textContent = balance;
-  tg.showAlert("Ты получил 5 бонусных очков ⭐");
+
+  try {
+    const response = await fetch(FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY
+      },
+      body: JSON.stringify({
+        initData: tg.initData
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Ошибка подключения");
+    }
+
+    document.getElementById("balance").textContent =
+      data.balance ?? 0;
+
+    status.textContent = "Профиль подключён ✅";
+    document.getElementById("dailyButton").disabled = false;
+
+  } catch (error) {
+    console.error(error);
+    status.textContent =
+      "Не удалось загрузить профиль. Проверь подключение.";
+  }
+}
+
+function daily() {
+  tg.showAlert(
+    "Ежедневный бонус пока подключается. Начисление появится после настройки серверной проверки."
+  );
 }
 
 function invite() {
   tg.showAlert("Реферальная система скоро появится!");
 }
+
+loadProfile();
 </script>
 </body>
 </html>
